@@ -2274,6 +2274,71 @@ mod tests {
     }
 
     #[test]
+    fn remove_me() {
+        check(
+            r#"
+//- /lib.rs
+$0
+struct Foo<const A: u64, const B: usize>(A, B);
+
+/// ```
+/// ```
+impl<const A: u64> Foo<A, 144> {
+    /// ```
+    /// ```
+    fn t() {}
+}
+"#,
+            // desired: Foo<Foo<(), 12, (), ()>, B, (), D>
+            // "Foo<Foo<(),12,(),()>,B,(),D>",
+            //
+            // "Foo<Foo<(),12,(),()>,B,(),D>::t",
+            // "Foo<Foo<(),12,(),()>,(),D,A,B,C,D>::t",
+            //      add fake tests here
+            //      fn t() {}
+            &[DocTest, DocTest],
+            expect![[r#"
+                [
+                    Runnable {
+                        use_name_in_title: false,
+                        nav: NavigationTarget {
+                            file_id: FileId(
+                                0,
+                            ),
+                            full_range: 50..138,
+                            focus_range: 85..96,
+                            name: "impl",
+                            kind: Impl,
+                        },
+                        kind: DocTest {
+                            test_id: Path(
+                                "Foo<A,144>",
+                            ),
+                        },
+                        cfg: None,
+                    },
+                    Runnable {
+                        use_name_in_title: false,
+                        nav: NavigationTarget {
+                            file_id: FileId(
+                                0,
+                            ),
+                            full_range: 103..136,
+                            name: "t",
+                        },
+                        kind: DocTest {
+                            test_id: Path(
+                                "Foo<A,144>::t",
+                            ),
+                        },
+                        cfg: None,
+                    },
+                ]
+            "#]],
+        );
+    }
+
+    #[test]
     fn doc_test_type_params() {
         check(
             r#"

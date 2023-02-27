@@ -42,7 +42,7 @@ use hir_def::{
     adt::VariantData,
     body::{BodyDiagnostic, SyntheticSyntax},
     expr::{BindingAnnotation, ExprOrPatId, LabelId, Pat, PatId},
-    generics::{ConstParamData, LifetimeParamData, TypeOrConstParamData, TypeParamProvenance},
+    generics::{LifetimeParamData, TypeOrConstParamData, TypeParamProvenance},
     item_tree::ItemTreeNode,
     lang_item::{LangItem, LangItemTarget},
     layout::{Layout, LayoutError, ReprOptions},
@@ -1189,30 +1189,51 @@ impl Adt {
             .map(|arena| arena.1.clone())
     }
 
-    /// Returns an iterator of all `const` generic paramaters
-    ///
-    /// This method is not well optimized, I could not statisfy the borrow
-    /// checker. I'm sure there are smarter ways to return the consts names
-    pub fn consts(&self, db: &dyn HirDatabase) -> impl Iterator<Item = ConstParamData> {
-        let resolver = match self {
-            Adt::Struct(s) => s.id.resolver(db.upcast()),
-            Adt::Union(u) => u.id.resolver(db.upcast()),
-            Adt::Enum(e) => e.id.resolver(db.upcast()),
-        };
-        resolver
-            .generic_params()
-            .map_or(vec![], |gp| {
-                gp.as_ref()
-                    .type_or_consts
-                    .iter()
-                    .filter_map(|arena| match arena.1 {
-                        TypeOrConstParamData::ConstParamData(consts) => Some(consts.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<ConstParamData>>()
-            })
-            .into_iter()
-    }
+    // /// Returns an iterator of all `type` and `const` generic paramater names
+    // ///
+    // /// The params are in the same order as in the source code but use the
+    // /// generic names, such as `T`, `U`. They can differ to the ones in the `Impl`
+    // /// if the `Impl` uses concrete types.
+    // ///
+    // /// For code, such as:
+    // /// ```text
+    // /// struct Foo<T, U>
+    // ///
+    // /// impl<U> Foo<String, U>
+    // /// ```
+    // ///
+    // /// It iterates:
+    // /// ```text
+    // /// - "T"
+    // /// - "U"
+    // /// ```
+    // ///
+    // ///
+    // /// This method is not well optimized, I could not statisfy the borrow
+    // /// checker. I'm sure there are smarter ways to return the consts names
+    // pub fn generic_params(&self, db: &dyn HirDatabase) -> impl Iterator<Item = Name> {
+    //     let resolver = match self {
+    //         Adt::Struct(s) => s.id.resolver(db.upcast()),
+    //         Adt::Union(u) => u.id.resolver(db.upcast()),
+    //         Adt::Enum(e) => e.id.resolver(db.upcast()),
+    //     };
+    //     resolver
+    //         .generic_params()
+    //         .map_or(vec![], |gp| {
+    //             gp.as_ref()
+    //                 .type_or_consts
+    //                 .iter()
+    //                 .map(|arena| match arena.1 {
+    //                     TypeOrConstParamData::ConstParamData(consts) => consts.name.clone(),
+    //                     TypeOrConstParamData::TypeParamData(ty) => match &ty.name {
+    //                         Some(name) => name.clone(),
+    //                         None => Name::missing(),
+    //                     },
+    //                 })
+    //                 .collect::<Vec<Name>>()
+    //         })
+    //         .into_iter()
+    // }
 
     pub fn as_enum(&self) -> Option<Enum> {
         if let Self::Enum(v) = self {
@@ -2896,6 +2917,36 @@ impl Impl {
         let src = self.source(db)?;
         src.file_id.is_builtin_derive(db.upcast())
     }
+
+    // pub fn resolver(self, db: &dyn HirDatabase) -> Resolver {
+    //     self.id.resolver(db.upcast())
+    // }
+
+    // // TODO: Check if this method is even used
+    // pub fn generic_params(self, db: &dyn HirDatabase) -> impl Iterator<Item = Name> {
+    //     self.resolver(db)
+    //         .generic_params()
+    //         .map_or(vec![], |gp| {
+    //             gp.as_ref()
+    //                 .type_or_consts
+    //                 .iter()
+    //                 .map(|arena| match arena.1 {
+    //                     TypeOrConstParamData::ConstParamData(consts) => {
+    //                         dbg!("Constant in IMPL", consts);
+    //                         consts.name.clone()
+    //                     }
+    //                     TypeOrConstParamData::TypeParamData(ty) => {
+    //                         dbg!("Type in IMPL", ty);
+    //                         match &ty.name {
+    //                             Some(name) => name.clone(),
+    //                             None => Name::missing(),
+    //                         }
+    //                     }
+    //                 })
+    //                 .collect::<Vec<Name>>()
+    //         })
+    //         .into_iter()
+    // }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -3365,6 +3416,24 @@ impl Type {
         }
     }
 
+    /// Iterates its type arguments
+    ///
+    /// It iterates the actual type arguments when concrete types are used
+    /// and otherwise the generic names.
+    /// It does not include `const` arguments.
+    ///
+    /// For code, such as:
+    /// ```text
+    /// struct Foo<T, U>
+    ///
+    /// impl<U> Foo<String, U>
+    /// ```
+    ///
+    /// It iterates:
+    /// ```text
+    /// - "String"
+    /// - "U"
+    /// ```
     pub fn type_arguments(&self) -> impl Iterator<Item = Type> + '_ {
         self.ty
             .strip_references()
@@ -3373,6 +3442,28 @@ impl Type {
             .flat_map(|(_, substs)| substs.iter(Interner))
             .filter_map(|arg| arg.ty(Interner).cloned())
             .map(move |ty| self.derived(ty))
+    }
+
+    pub fn type_and_const_arguments<'a>(
+        &'a self,
+        db: &'a dyn HirDatabase,
+    ) -> impl Iterator<Item = SmolStr> + 'a {
+        self.ty
+            .strip_references()
+            .as_adt()
+            .into_iter()
+            .flat_map(|(_, substs)| substs.iter(Interner))
+            .filter_map(|arg| {
+                // arg can be either a `Ty` or `constant`
+                if let Some(ty) = arg.ty(Interner) {
+                    Some(SmolStr::new(ty.display(db).to_string()))
+                    // Some(ty)
+                } else if let Some(const_) = arg.constant(Interner) {
+                    Some(SmolStr::new_inline(&const_.display(db).to_string()))
+                } else {
+                    None
+                }
+            })
     }
 
     /// Combines lifetime indicators, type and constant parameters into a single `Iterator`
@@ -3384,12 +3475,8 @@ impl Type {
         self.as_adt()
             .and_then(|a| a.lifetime(db).and_then(|lt| Some((&lt.name).to_smol_str())))
             .into_iter()
-            // add the type paramaters
-            .chain(self.type_arguments().map(|ty| SmolStr::new(ty.display(db).to_string())))
-            // add const paramameters
-            .chain(self.as_adt().map_or(vec![], |a| {
-                a.consts(db).map(|cs| cs.name.to_smol_str()).collect::<Vec<SmolStr>>()
-            }))
+            // add the type and const paramaters
+            .chain(self.type_and_const_arguments(db))
     }
 
     pub fn iterate_method_candidates<T>(
