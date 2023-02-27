@@ -1189,52 +1189,6 @@ impl Adt {
             .map(|arena| arena.1.clone())
     }
 
-    // /// Returns an iterator of all `type` and `const` generic paramater names
-    // ///
-    // /// The params are in the same order as in the source code but use the
-    // /// generic names, such as `T`, `U`. They can differ to the ones in the `Impl`
-    // /// if the `Impl` uses concrete types.
-    // ///
-    // /// For code, such as:
-    // /// ```text
-    // /// struct Foo<T, U>
-    // ///
-    // /// impl<U> Foo<String, U>
-    // /// ```
-    // ///
-    // /// It iterates:
-    // /// ```text
-    // /// - "T"
-    // /// - "U"
-    // /// ```
-    // ///
-    // ///
-    // /// This method is not well optimized, I could not statisfy the borrow
-    // /// checker. I'm sure there are smarter ways to return the consts names
-    // pub fn generic_params(&self, db: &dyn HirDatabase) -> impl Iterator<Item = Name> {
-    //     let resolver = match self {
-    //         Adt::Struct(s) => s.id.resolver(db.upcast()),
-    //         Adt::Union(u) => u.id.resolver(db.upcast()),
-    //         Adt::Enum(e) => e.id.resolver(db.upcast()),
-    //     };
-    //     resolver
-    //         .generic_params()
-    //         .map_or(vec![], |gp| {
-    //             gp.as_ref()
-    //                 .type_or_consts
-    //                 .iter()
-    //                 .map(|arena| match arena.1 {
-    //                     TypeOrConstParamData::ConstParamData(consts) => consts.name.clone(),
-    //                     TypeOrConstParamData::TypeParamData(ty) => match &ty.name {
-    //                         Some(name) => name.clone(),
-    //                         None => Name::missing(),
-    //                     },
-    //                 })
-    //                 .collect::<Vec<Name>>()
-    //         })
-    //         .into_iter()
-    // }
-
     pub fn as_enum(&self) -> Option<Enum> {
         if let Self::Enum(v) = self {
             Some(*v)
@@ -2917,36 +2871,6 @@ impl Impl {
         let src = self.source(db)?;
         src.file_id.is_builtin_derive(db.upcast())
     }
-
-    // pub fn resolver(self, db: &dyn HirDatabase) -> Resolver {
-    //     self.id.resolver(db.upcast())
-    // }
-
-    // // TODO: Check if this method is even used
-    // pub fn generic_params(self, db: &dyn HirDatabase) -> impl Iterator<Item = Name> {
-    //     self.resolver(db)
-    //         .generic_params()
-    //         .map_or(vec![], |gp| {
-    //             gp.as_ref()
-    //                 .type_or_consts
-    //                 .iter()
-    //                 .map(|arena| match arena.1 {
-    //                     TypeOrConstParamData::ConstParamData(consts) => {
-    //                         dbg!("Constant in IMPL", consts);
-    //                         consts.name.clone()
-    //                     }
-    //                     TypeOrConstParamData::TypeParamData(ty) => {
-    //                         dbg!("Type in IMPL", ty);
-    //                         match &ty.name {
-    //                             Some(name) => name.clone(),
-    //                             None => Name::missing(),
-    //                         }
-    //                     }
-    //                 })
-    //                 .collect::<Vec<Name>>()
-    //         })
-    //         .into_iter()
-    // }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
