@@ -2274,29 +2274,21 @@ mod tests {
     }
 
     #[test]
-    fn remove_me() {
+    fn test_runnables_doc_test_in_impl_with_lifetime_type_const_value() {
         check(
             r#"
 //- /lib.rs
 $0
-struct Foo<const A: u64, const B: usize>(A, B);
+fn main() {}
 
-/// ```
-/// ```
-impl<const A: u64> Foo<A, 144> {
+struct Data<'a, A, const B: usize, C, const D: u32>;
+impl<A, C, const D: u32> Data<'a, A, 12, C, D> {
     /// ```
     /// ```
-    fn t() {}
+    fn foo() {}
 }
 "#,
-            // desired: Foo<Foo<(), 12, (), ()>, B, (), D>
-            // "Foo<Foo<(),12,(),()>,B,(),D>",
-            //
-            // "Foo<Foo<(),12,(),()>,B,(),D>::t",
-            // "Foo<Foo<(),12,(),()>,(),D,A,B,C,D>::t",
-            //      add fake tests here
-            //      fn t() {}
-            &[DocTest, DocTest],
+            &[Bin, DocTest],
             expect![[r#"
                 [
                     Runnable {
@@ -2305,16 +2297,12 @@ impl<const A: u64> Foo<A, 144> {
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 50..138,
-                            focus_range: 85..96,
-                            name: "impl",
-                            kind: Impl,
+                            full_range: 1..13,
+                            focus_range: 4..8,
+                            name: "main",
+                            kind: Function,
                         },
-                        kind: DocTest {
-                            test_id: Path(
-                                "Foo<A,144>",
-                            ),
-                        },
+                        kind: Bin,
                         cfg: None,
                     },
                     Runnable {
@@ -2323,12 +2311,12 @@ impl<const A: u64> Foo<A, 144> {
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 103..136,
-                            name: "t",
+                            full_range: 121..156,
+                            name: "foo",
                         },
                         kind: DocTest {
                             test_id: Path(
-                                "Foo<A,144>::t",
+                                "Data<'a,A,12,C,D>::foo",
                             ),
                         },
                         cfg: None,
@@ -2337,6 +2325,7 @@ impl<const A: u64> Foo<A, 144> {
             "#]],
         );
     }
+
 
     #[test]
     fn doc_test_type_params() {
