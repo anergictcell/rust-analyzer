@@ -3368,6 +3368,24 @@ impl Type {
             .map(move |ty| self.derived(ty))
     }
 
+    /// Iterates its type and const arguments
+    ///
+    /// It iterates the actual type and const arguments when concrete types
+    /// are used and otherwise the generic names.
+    ///
+    /// For code, such as:
+    /// ```text
+    /// struct Foo<T, const U: usize, const X: usize>
+    ///
+    /// impl<U> Foo<String, U, 12>
+    /// ```
+    ///
+    /// It iterates:
+    /// ```text
+    /// - "String"
+    /// - "U"
+    /// - "12"
+    /// ```
     pub fn type_and_const_arguments<'a>(
         &'a self,
         db: &'a dyn HirDatabase,
